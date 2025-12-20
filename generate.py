@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import dataclass
 
 from scapy.all import PcapReader
 
@@ -29,15 +30,52 @@ def iter_pcap(path):
             yield float(getattr(pkt, "time", 0.0)), bytes(pkt)
 
 
+@dataclass
+class Gem:
+    gid: int
+    pti: int
+    pli: int
+    header: bytes
+    payload: bytes
+    arrival_us: float
+
+
+PORT_ID = 0x101
+MAX_PLI = 4095          # PLI가 12bit라서 4095가 최대 (G.984.3 8.3.1)
+
+
+def build_gems(pcap_path):
+    gems = []
+    gid = 0
+    first = None
+
+    for ts, eth in iter_pcap(pcap_path):
+        if first is None:
+            first = ts
+        rel_us = max(0.0, (ts - first) * 1e6)
+
+        off, n = 0, len(eth)
+        while off < n:
+            take = min(MAX_PLI, n - off)
+            is_last = off + take == n
+            pti = 0b001 if is_last else 0b000    # 마지막 조각이면 001
+            frag = eth[off:off + take]
+            hdr = gem_header(take, PORT_ID, pti)
+
+            gems.append(Gem(gid, pti, take, hdr, frag, rel_us))
+            gid += 1
+            off += take
+
+    return gems
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", required=True)
     args = ap.parse_args()
 
-    n = 0
-    for ts, eth in iter_pcap(args.pcap):
-        n += 1
-    print("packets =", n)
+    gems = build_gems(args.pcap)
+    print("gem =", len(gems))
 
 
 if __name__ == "__main__":
