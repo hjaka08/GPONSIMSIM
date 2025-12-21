@@ -72,12 +72,38 @@ def build_gems(pcap_path):
     return gems
 
 
+def pack(gems, out_bin, pcbd_bytes):
+    frame_total = int(round(LINE_RATE * FRAME_US * 1e-6 / 8.0))   # 38880
+    budget = frame_total - pcbd_bytes
+    if budget <= 0:
+        raise ValueError("pcbd_bytes too big")
+
+    with open(out_bin, "wb") as fb:
+        used = 0
+        fb.write(b"\x00" * pcbd_bytes)
+
+        for g in gems:
+            if budget - used < GEM_HDR + 1:
+                fb.write(b"\x00" * (budget - used))
+                fb.write(b"\x00" * pcbd_bytes)
+                used = 0
+
+            fb.write(g.header)
+            used += GEM_HDR
+            fb.write(g.payload)
+            used += g.pli
+
+        if used < budget:
+            fb.write(b"\x00" * (budget - used))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", required=True)
     args = ap.parse_args()
 
     gems = build_gems(args.pcap)
+    pack(gems, "out_gtc.bin", 40)
     print("gem =", len(gems))
 
 
