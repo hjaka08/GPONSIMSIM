@@ -40,8 +40,11 @@ class Gem:
     arrival_us: float
 
 
-PORT_ID = 0x101
-MAX_PLI = 4095          # PLI가 12bit라서 4095가 최대 (G.984.3 8.3.1)
+PORT_ID   = 0x101
+MAX_PLI   = 4095         # PLI가 12bit라서 4095가 최대 (G.984.3 8.3.1)
+GEM_HDR   = 5            # GEM 헤더 5바이트
+LINE_RATE = 2.48832e9    #GPON이므로 2.5Gbps..
+FRAME_US  = 125.0        # GTC 프레임 하나가 125us (38880 byte)
 
 
 def build_gems(pcap_path):
