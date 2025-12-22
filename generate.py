@@ -1,4 +1,5 @@
 import argparse
+import csv
 from dataclasses import dataclass
 
 from scapy.all import PcapReader
@@ -41,10 +42,10 @@ class Gem:
 
 
 PORT_ID   = 0x101
-MAX_PLI   = 4095         # PLI가 12bit라서 4095가 최대 (G.984.3 8.3.1)
-GEM_HDR   = 5            # GEM 헤더 5바이트
+MAX_PLI   = 4095
+GEM_HDR   = 5
 LINE_RATE = 2.48832e9    #GPON이므로 2.5Gbps..
-FRAME_US  = 125.0        # GTC 프레임 하나가 125us (38880 byte)
+FRAME_US  = 125.0
 
 
 def build_gems(pcap_path):
@@ -61,7 +62,7 @@ def build_gems(pcap_path):
         while off < n:
             take = min(MAX_PLI, n - off)
             is_last = off + take == n
-            pti = 0b001 if is_last else 0b000    # 마지막 조각이면 001
+            pti = 0b001 if is_last else 0b000
             frag = eth[off:off + take]
             hdr = gem_header(take, PORT_ID, pti)
 
@@ -72,19 +73,31 @@ def build_gems(pcap_path):
     return gems
 
 
-def pack(gems, out_bin, pcbd_bytes):
-    frame_total = int(round(LINE_RATE * FRAME_US * 1e-6 / 8.0))   # 38880
+def pack(gems, out_bin, frames_csv, pcbd_bytes):
+    frame_total = int(round(LINE_RATE * FRAME_US * 1e-6 / 8.0))
     budget = frame_total - pcbd_bytes
     if budget <= 0:
         raise ValueError("pcbd_bytes too big")
 
-    with open(out_bin, "wb") as fb:
+    with open(out_bin, "wb") as fb, \
+         open(frames_csv, "w", newline="", encoding="utf-8") as ff:
+
+        fw = csv.writer(ff)
+        fw.writerow(["frame_idx", "t_start_us", "t_end_us",
+                     "frame_bytes_total", "pcbd_bytes", "payload_used_bytes"])
+
+        frame_idx = 0
         used = 0
         fb.write(b"\x00" * pcbd_bytes)
 
         for g in gems:
             if budget - used < GEM_HDR + 1:
                 fb.write(b"\x00" * (budget - used))
+                fw.writerow([frame_idx,
+                             f"{frame_idx*FRAME_US:.3f}",
+                             f"{(frame_idx+1)*FRAME_US:.3f}",
+                             frame_total, pcbd_bytes, used])
+                frame_idx += 1
                 fb.write(b"\x00" * pcbd_bytes)
                 used = 0
 
@@ -93,8 +106,11 @@ def pack(gems, out_bin, pcbd_bytes):
             fb.write(g.payload)
             used += g.pli
 
-        if used < budget:
-            fb.write(b"\x00" * (budget - used))
+        fb.write(b"\x00" * max(0, budget - used))
+        fw.writerow([frame_idx,
+                     f"{frame_idx*FRAME_US:.3f}",
+                     f"{(frame_idx+1)*FRAME_US:.3f}",
+                     frame_total, pcbd_bytes, used])
 
 
 def main():
@@ -103,7 +119,7 @@ def main():
     args = ap.parse_args()
 
     gems = build_gems(args.pcap)
-    pack(gems, "out_gtc.bin", 40)
+    pack(gems, "out_gtc.bin", "frames.csv", 40)
     print("gem =", len(gems))
 
 
