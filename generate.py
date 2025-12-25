@@ -141,8 +141,19 @@ def pack(gems, out_bin, frames_csv, gems_csv, pcbd_bytes):
             used += GEM_HDR
 
        
-            fb.write(g.payload)
-            used += g.pli
+            poff, n = 0, len(g.payload)
+            while poff < n:
+                room = budget - used
+                if room <= 0:
+                    close_frame(frame_idx, used)
+                    frame_idx += 1
+                    open_frame()
+                    used = 0
+                    room = budget
+                take = min(n - poff, room)
+                fb.write(g.payload[poff:poff + take])
+                used += take
+                poff += take
 
             t1 = frame_idx * FRAME_US + used * 8.0 / LINE_RATE * 1e6
             gw.writerow([g.gid, PORT_ID, g.pti, g.pli,
