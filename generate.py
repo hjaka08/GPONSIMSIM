@@ -128,7 +128,8 @@ def pack(gems, out_bin, frames_csv, gems_csv, pcbd_bytes):
                 used = 0
 
          
-            if budget - used < GEM_HDR + 1:
+            need = GEM_HDR if g.pli == 0 else GEM_HDR + 1
+            while budget - used < need:
                 close_frame(frame_idx, used)
                 frame_idx += 1
                 open_frame()
