@@ -1,7 +1,5 @@
 import argparse
 import csv
-
-from scapy.all import PcapReader
 from dataclasses import dataclass
 
 
@@ -27,6 +25,8 @@ def gem_header(pli, port_id, pti):
 
 
 def iter_pcap(path):
+    
+    from scapy.all import PcapReader
     with PcapReader(path) as pr:
         for pkt in pr:
             yield float(getattr(pkt, "time", 0.0)), bytes(pkt)
@@ -83,6 +83,13 @@ def pack(gems, out_bin, frames_csv, gems_csv, pcbd_bytes):
     if budget <= 0:
         raise ValueError("pcbd_bytes too big")
 
+    starts = []
+    cur = 0.0
+    for g in gems:
+        s = max(g.arrival_us, cur)
+        starts.append(s)
+        cur = s + (GEM_HDR + g.pli) * 8.0 / LINE_RATE * 1e6
+
     with open(out_bin, "wb") as fb, \
          open(frames_csv, "w", newline="", encoding="utf-8") as ff, \
          open(gems_csv,   "w", newline="", encoding="utf-8") as fg:
@@ -113,7 +120,7 @@ def pack(gems, out_bin, frames_csv, gems_csv, pcbd_bytes):
                          frame_total, pcbd_bytes, u])
 
         for i, g in enumerate(gems):
-            tgt = int(g.arrival_us // FRAME_US)
+            tgt = int(starts[i] // FRAME_US)
 
          
             if in_frame and tgt > frame_idx:
@@ -168,11 +175,15 @@ def pack(gems, out_bin, frames_csv, gems_csv, pcbd_bytes):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pcap", required=True)
+    ap.add_argument("--out-gtc",    default="out_gtc.bin")
+    ap.add_argument("--frames-csv", default="frames.csv")
+    ap.add_argument("--gems-csv",   default="gems.csv")
+    ap.add_argument("--pcbd-bytes", type=int, default=40)
     args = ap.parse_args()
 
     gems = build_gems(args.pcap)
-    pack(gems, "out_gtc.bin", "frames.csv", "gems.csv", 40)
-    print(f"done. gem={len(gems)}")
+    pack(gems, args.out_gtc, args.frames_csv, args.gems_csv, args.pcbd_bytes)
+    print(f"done. gem={len(gems)} -> {args.gems_csv}")
 
 
 if __name__ == "__main__":
