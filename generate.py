@@ -33,6 +33,15 @@ def iter_pcap(path):
     
 
 
+def aes_ctr(key, nonce, data):
+    # G.984.3 12.2 : 다운스트림은 GEM 페이로드만 AES로 암호화한다.
+    # 길이는 그대로라서 PLI 값은 안 바뀜 -> 사실 실험에는 필요 없을지도?
+    from Crypto.Cipher import AES
+    from Crypto.Util import Counter
+    ctr = Counter.new(128, initial_value=nonce)
+    return AES.new(key, AES.MODE_CTR, counter=ctr).encrypt(data)
+
+
 @dataclass
 class Gem:
     gid: int
@@ -43,6 +52,7 @@ class Gem:
     arrival_us: float
 
 
+ENC_KEY   = None         # 16바이트 키를 넣으면 페이로드를 AES-CTR로 암호화
 PORT_ID   = 0x101
 MAX_PLI   = 4095
 GEM_HDR   = 5            
@@ -69,6 +79,9 @@ def build_gems(pcap_path):
             hdr = gem_header(take, PORT_ID, pti)
 
 
+
+            if ENC_KEY is not None:
+                frag = aes_ctr(ENC_KEY, gid, frag)
 
             gems.append(Gem(gid, pti, take, hdr, frag, rel_us))
             gid += 1
@@ -179,7 +192,12 @@ def main():
     ap.add_argument("--frames-csv", default="frames.csv")
     ap.add_argument("--gems-csv",   default="gems.csv")
     ap.add_argument("--pcbd-bytes", type=int, default=40)
+    ap.add_argument("--aes-key", default=None, help="16바이트 hex 키 (실험용)")
     args = ap.parse_args()
+
+    global ENC_KEY
+    if args.aes_key:
+        ENC_KEY = bytes.fromhex(args.aes_key)
 
     gems = build_gems(args.pcap)
     pack(gems, args.out_gtc, args.frames_csv, args.gems_csv, args.pcbd_bytes)
