@@ -1,4 +1,4 @@
-import glob, os, subprocess, sys, time
+import csv, glob, os, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -58,7 +58,7 @@ if not jobs:
 
 
 
-ok, fail, skip = 0, 0, 0
+rows, ok, fail, skip = [], 0, 0, 0
 t0 = time.time()
 
 with ThreadPoolExecutor(max_workers=8) as pool:
@@ -68,10 +68,18 @@ with ThreadPoolExecutor(max_workers=8) as pool:
         if   status == "OK":   ok   += 1
         elif status == "SKIP": skip += 1
         else:                  fail += 1
+        rows.append({**job, "status": status, "message": msg})
         if i % 10 == 0 or i == len(futures):
             print(f"[{i}/{len(futures)}] OK={ok} SKIP={skip} FAIL={fail}")
 
 print(f"끝. OK={ok} SKIP={skip} FAIL={fail} ")
+
+with open("build_report.csv", "w", newline="", encoding="utf-8") as f:
+    w = csv.DictWriter(f, fieldnames=[
+        "group", "id", "run", "pcap", "frames_csv", "gems_csv", "status", "message"
+    ])
+    w.writeheader()
+    w.writerows(rows)
 print("ROGER Affirmative; success")
 
 if fail > 0:
