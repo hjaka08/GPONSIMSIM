@@ -77,8 +77,38 @@ def main():
     if not series:
         raise SystemExit("FILE NOT FOND")
 
-    for k, v in sorted(series.items()):
-        print(k, len(v), f"{v[-1]:.3f}")
+
+    rows = []
+    for vid in vids:
+        for i in range(len(runs)):
+            for j in range(i + 1, len(runs)):
+                a = series.get((vid, runs[i]))
+                b = series.get((vid, runs[j]))
+                if a is None or b is None:
+                    continue
+                rows.append(("same", vid, runs[i], vid, runs[j],
+                             pearson(a, b), rmse(a, b)))
+
+    for i in range(len(vids)):
+        for j in range(i + 1, len(vids)):
+            for r1 in runs:
+                for r2 in runs:
+                    a = series.get((vids[i], r1))
+                    b = series.get((vids[j], r2))
+                    if a is None or b is None:
+                        continue
+                    rows.append(("different", vids[i], r1, vids[j], r2,
+                                 pearson(a, b), rmse(a, b)))
+
+    pairs_csv = out_dir / "pli_similarity_pairs.csv"
+    with open(pairs_csv, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["pair_type", "vid_a", "run_a", "vid_b", "run_b",
+                    "pearson_r", "rmse"])
+        w.writerows(rows)
+
+
+    print(f"pairs   : {pairs_csv}")
 
 
 if __name__ == "__main__":
