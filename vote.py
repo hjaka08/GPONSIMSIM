@@ -108,7 +108,50 @@ def main():
         w.writerows(rows)
 
 
+    summary = []
+
+    for name, key, col, higher_better in [
+        ("Pearson", "pearson_r", 5, True),
+        ("RMSE",    "rmse",      6, False),
+    ]:
+        same = np.array([r[col] for r in rows if r[0] == "same"], dtype=np.float64)
+        diff = np.array([r[col] for r in rows if r[0] == "different"], dtype=np.float64)
+        same = same[np.isfinite(same)]
+        diff = diff[np.isfinite(diff)]
+
+        summary.append(f"=== {name} ===")
+        if same.size:
+            summary.append(f"same      n={same.size:4d}  mean={same.mean():.4g}  "
+                           f"median={np.median(same):.4g}  "
+                           f"min={same.min():.4g}  max={same.max():.4g}")
+        if diff.size:
+            summary.append(f"different n={diff.size:4d}  mean={diff.mean():.4g}  "
+                           f"median={np.median(diff):.4g}  "
+                           f"min={diff.min():.4g}  max={diff.max():.4g}")
+
+        if same.size and diff.size:
+            pos = same if higher_better else -same
+            neg = diff if higher_better else -diff
+            d = pos[:, None] - neg[None, :]
+            auc = float((d > 0).mean() + 0.5 * (d == 0).mean())
+            summary.append(f"AUC = {auc:.4g}")
+        summary.append("")
+
+        plt.figure()
+        plt.boxplot([same, diff], tick_labels=["same", "different"], showfliers=True)
+        plt.title(f"{name} (cumsum, normalize=final)")
+        plt.ylabel("corr (higher=more similar)" if higher_better
+                   else "dist (lower=more similar)")
+        plt.grid(True, axis="y", alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(out_dir / f"box_{key}.png", dpi=200)
+        plt.close()
+
+
+    (out_dir / "summary.txt").write_text("\n".join(summary), encoding="utf-8")
+
     print(f"pairs   : {pairs_csv}")
+    print(f"summary : {out_dir / 'summary.txt'}")
 
 
 if __name__ == "__main__":
