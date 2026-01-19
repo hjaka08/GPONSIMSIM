@@ -148,10 +148,68 @@ def main():
         plt.close()
 
 
+    database1 = [(v, r) for v in vids for r in db_runs if (v, r) in series]
+
+    top1_rows = []
+    correct = total = 0
+    for true_vid in vids:
+        for qrun in query_runs:
+            q = series.get((true_vid, qrun))
+            if q is None:
+                continue
+
+            pv = np.array([pearson(q, series[g]) for g in database1])
+            rv = np.array([rmse(q, series[g])    for g in database1])
+
+         
+            pr = np.empty(len(database1), dtype=int)
+            rr = np.empty(len(database1), dtype=int)
+            pr[np.argsort(-pv, kind="stable")] = np.arange(1, len(database1) + 1)
+            rr[np.argsort( rv, kind="stable")] = np.arange(1, len(database1) + 1)
+            rs = pr + rr
+
+            best   = int(np.argmin(rs))
+            order  = np.argsort(rs, kind="stable")
+            second = int(order[1]) if len(order) > 1 else best
+            pred_vid, pred_run = database1[best]
+
+            total += 1
+            if pred_vid == true_vid:
+                correct += 1
+
+            top1_rows.append({
+                "true_vid":     true_vid,
+                "query_run":    qrun,
+                "pred_vid":     pred_vid,
+                "pred_run":     pred_run,
+                "metric":       "vote_pr",
+                "best_score":   -int(rs[best]),
+                "second_score": -int(rs[second]) if len(order) > 1 else float("nan"),
+                "margin":       int(rs[second] - rs[best]) if len(order) > 1 else float("nan"),
+                "pearson_best": float(pv[best]),
+                "rmse_best":    float(rv[best]),
+                "rank_pearson": int(pr[best]),
+                "rank_rmse":    int(rr[best]),
+                "rank_sum":     int(rs[best]),
+            })
+
+    top1_csv = out_dir / "top1_vote.csv"
+    with open(top1_csv, "w", encoding="utf-8", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(top1_rows[0].keys()))
+        w.writeheader()
+        w.writerows(top1_rows)
+
+    acc = correct / total if total else float("nan")
+    summary.append("Top-1 identification;")
+    summary.append(f"database={','.join(db_runs)}  query={','.join(query_runs)}")
+    summary.append(f"accuracy = {acc:.4g}  (correct={correct}/{total})")
+
     (out_dir / "summary.txt").write_text("\n".join(summary), encoding="utf-8")
 
     print(f"pairs   : {pairs_csv}")
+    print(f"top1    : {top1_csv}")
     print(f"summary : {out_dir / 'summary.txt'}")
+    print(f"Top-1 accuracy = {acc:.4g}  ({correct}/{total})")
 
 
 if __name__ == "__main__":
